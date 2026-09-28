@@ -10,14 +10,16 @@ LABEL maintainer="Emmanoel Monteiro " \
 # Instala o git para permitir a clonagem do repositório
 RUN apk add --no-cache git
 
-# Define o diretório de trabalho dentro do container
-WORKDIR /app
+# Clona o repositório do projeto e usa os arquivos da API
+WORKDIR /repo
 
-# Clona o repositório diretamente do GitHub para dentro do diretório de trabalho
-RUN git clone https://github.com/EmmanoelMonteiro/to-do-list-api.git .
+# Clona o repositório do projeto diretamente do GitHub
+RUN git clone https://github.com/Monalisaess/projeto-01-cloud-todo.git .
+
+WORKDIR /repo/backend
 
 # Instala as dependências do projeto (omitindo as de desenvolvimento)
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Expõe a porta usada pela aplicação
 EXPOSE 3000
