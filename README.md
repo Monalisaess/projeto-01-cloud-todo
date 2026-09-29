@@ -66,12 +66,3 @@ Cada API possui o endpoint interno `GET /health`, utilizado pelo healthcheck do 
 ## Observação sobre dados
 
 As três réplicas compartilham os dados no MySQL da máquina. `docker compose down` não apaga o banco nem as tarefas; eles permanecem no servidor MySQL local.
-
-## Publicar a imagem MySQL no Docker Hub
-
-A imagem personalizada contém o servidor MySQL 8.4 e `database/init.sql`, que cria o schema e os dados iniciais quando um contêiner novo é inicializado. Ela não contém os dados atuais do MySQL instalado no computador. O Compose deste projeto continua usando o MySQL local.
-
-```bash
-docker build -t monalisaess/projeto-01-cloud-todo1-mysql:1.0 ./database
-docker push monalisaess/projeto-01-cloud-todo1-mysql:1.0
-```
