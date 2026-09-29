@@ -1,37 +1,39 @@
 # Projeto 01 — To-do List em Computação em Nuvem
 
-Esta entrega usa Docker Compose para executar a aplicação de tarefas com três réplicas da API e um balanceador Nginx.
+Esta aplicação usa Docker Compose para executar o frontend, três réplicas da API, um balanceador Nginx e o banco MySQL.
 
 ## Arquitetura
 
 ```text
-Navegador
-   │ http://localhost:8080
+Navegador (http://localhost:8080)
+   │
    ▼
 Frontend (React + Nginx)
    │ /api/*
    ▼
 Load balancer (Nginx, least_conn)
-   ├── api-1 (Express)
-   ├── api-2 (Express)
-   └── api-3 (Express)
-           │
-           ▼
-       MySQL Server
-       (instalado no computador)
+   ├── api-1 (Express) ─┐
+   ├── api-2 (Express) ─┼── MySQL (contêiner Docker Compose)
+   └── api-3 (Express) ─┘
 ```
 
-O frontend não conhece portas ou endereços das APIs. Ele chama `/api/tarefas`; o Nginx do frontend encaminha a chamada ao serviço `load-balancer`, que seleciona a réplica menos ocupada. As três APIs compartilham o mesmo MySQL instalado no computador. O MySQL não roda em contêiner; os demais serviços continuam no Docker Compose.
+Todos os serviços, inclusive o MySQL, rodam em contêineres do Docker Compose. As APIs acessam o banco pelo nome do serviço `mysql`, na rede interna `todo-network`.
 
 ## Banco de dados
 
-Instale e inicie o **MySQL Server** no computador. O MySQL Workbench sozinho é apenas uma interface e não substitui o servidor. No Workbench, conecte-se como administrador, abra `database/init.sql` e execute o script. Ele cria o banco `todo_list`, o usuário `todo_user`, a tabela `tarefas` e algumas tarefas iniciais.
+O serviço MySQL usa a imagem `monalisaess/projeto-01-cloud-todo1-mysql:1.0`. Na primeira inicialização, o script da imagem cria o banco `todo_list`, o usuário `todo_user`, a tabela `tarefas` e tarefas iniciais.
 
-O Docker acessa o servidor local pelo endereço `host.docker.internal`, na porta 3306. Se o MySQL rejeitar a conexão, configure o servidor para aceitar conexões TCP vindas dos contêineres e confira a regra do Firewall do Windows para a porta 3306. O script cria o usuário MySQL `todo_user` com a senha local `todo_local_todo`; altere essa senha no script e no `.env` se preferir outra.
+Os dados ficam no volume Docker `mysql-data`, então continuam disponíveis após `docker compose down` e ao recriar os contêineres. Para remover também o banco e todos os dados, use `docker compose down -v`.
 
-Copie `.env.example` para `.env` na raiz do projeto para configurar os parâmetros da conexão. O arquivo `.env` é ignorado pelo Git.
+O MySQL do Compose publica a porta 3307 do computador para a porta 3306 do contêiner, evitando conflito com um MySQL Server instalado no Windows. As APIs usam exclusivamente o MySQL do contêiner. O Workbench pode se conectar ao banco do contêiner usando:
 
-No PowerShell, use:
+- Host: `127.0.0.1`
+- Porta: `3307`
+- Usuário: `todo_user`
+- Senha padrão: `todo_local_todo`
+- Database: `todo_list`
+
+As senhas podem ser alteradas no arquivo `.env`. Para criá-lo a partir do exemplo no PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
@@ -42,12 +44,18 @@ Copy-Item .env.example .env
 Pré-requisito: Docker Desktop em execução.
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
 Depois, abra [http://localhost:8080](http://localhost:8080).
 
-Para encerrar os contêineres:
+Para ver o estado dos serviços:
+
+```bash
+docker compose ps
+```
+
+Para encerrar os contêineres mantendo os dados:
 
 ```bash
 docker compose down
@@ -55,14 +63,10 @@ docker compose down
 
 ## Verificação
 
-Com a aplicação ativa, uma consulta à API pelo frontend deve retornar as tarefas:
+Com a aplicação ativa, consulte as tarefas pela API:
 
 ```bash
 curl http://localhost:8080/api/tarefas
 ```
 
-Cada API possui o endpoint interno `GET /health`, utilizado pelo healthcheck do Compose. O endpoint confirma também que a API consegue acessar o MySQL.
-
-## Observação sobre dados
-
-As três réplicas compartilham os dados no MySQL da máquina. `docker compose down` não apaga o banco nem as tarefas; eles permanecem no servidor MySQL local.
+Cada API possui o endpoint interno `GET /health`, usado pelo healthcheck do Compose e que confirma também o acesso ao MySQL.

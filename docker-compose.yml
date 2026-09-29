@@ -1,4 +1,24 @@
 services:
+  mysql:
+    image: monalisaess/projeto-01-cloud-todo1-mysql:1.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_local_todo}
+      MYSQL_DATABASE: todo_list
+      MYSQL_USER: todo_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-todo_local_todo}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - todo-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   frontend:
     build:
       context: ./frontend
@@ -28,13 +48,14 @@ services:
       context: ./backend
     environment:
       INSTANCE_NAME: api-1
-      DB_HOST: ${DB_HOST:-host.docker.internal}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_NAME: ${DB_NAME:-todo_list}
-      DB_USER: ${DB_USER:-todo_user}
-      DB_PASSWORD: ${DB_PASSWORD:-todo_local_todo}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: todo_list
+      DB_USER: todo_user
+      DB_PASSWORD: ${MYSQL_PASSWORD:-todo_local_todo}
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - todo-network
     healthcheck: &api-healthcheck
@@ -49,13 +70,14 @@ services:
       context: ./backend
     environment:
       INSTANCE_NAME: api-2
-      DB_HOST: ${DB_HOST:-host.docker.internal}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_NAME: ${DB_NAME:-todo_list}
-      DB_USER: ${DB_USER:-todo_user}
-      DB_PASSWORD: ${DB_PASSWORD:-todo_local_todo}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: todo_list
+      DB_USER: todo_user
+      DB_PASSWORD: ${MYSQL_PASSWORD:-todo_local_todo}
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - todo-network
     healthcheck: *api-healthcheck
@@ -65,16 +87,20 @@ services:
       context: ./backend
     environment:
       INSTANCE_NAME: api-3
-      DB_HOST: ${DB_HOST:-host.docker.internal}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_NAME: ${DB_NAME:-todo_list}
-      DB_USER: ${DB_USER:-todo_user}
-      DB_PASSWORD: ${DB_PASSWORD:-todo_local_todo}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: todo_list
+      DB_USER: todo_user
+      DB_PASSWORD: ${MYSQL_PASSWORD:-todo_local_todo}
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - todo-network
     healthcheck: *api-healthcheck
+
+volumes:
+  mysql-data:
 
 networks:
   todo-network:
