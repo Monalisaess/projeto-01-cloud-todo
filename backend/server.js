@@ -1,110 +1,141 @@
 const express = require('express');
 const cors = require('cors');
+const mysql = require('mysql2/promise');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const INSTANCE_NAME = process.env.INSTANCE_NAME || 'api';
 
-// Middleware CORS
-// ESSENCIAL para permitir que seu front-end (rodando em http://localhost:5173) 
-// se comunique com esta API (rodando em http://localhost:3000).
-app.use(cors()); 
-
-// Middleware para processar JSON nas requisições POST/PUT
-app.use(express.json());
-
-// ===============================================
-// DADOS MOCKADOS
-// IMPORTANTE: O front-end React espera a propriedade 'id'
-// Para simular o MongoDB, estamos usando '_id' aqui para nos prepararmos 
-// para o próximo passo (embora 'id' também funcionasse por enquanto).
-// ===============================================
-let mockTarefas = [
-    { 
-        id: 1361434473096, 
-        texto: 'Configurar a API Node.js com Express', 
-        concluida: true 
-    },
-    { 
-        id: 1461434473096, 
-        texto: 'Testar a busca de dados no componente App.jsx', 
-        concluida: false 
-    },
-    { 
-        id: 1561434473096, 
-        texto: 'Começar a estilização dos componentes com Bootstrap', 
-        concluida: false 
-    },
-];
-
-// ===============================================
-// ROTA 1: GET /tarefas (BUSCAR TODAS)
-// ===============================================
-app.get('/tarefas', (req, res) => {
-    console.log('Requisição GET recebida em /tarefas');
-    
-    // Simplesmente retorna o array mockado
-    return res.json(mockTarefas);
+const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT || 3306),
+    database: process.env.DB_NAME || 'todo_list',
+    user: process.env.DB_USER || 'todo_user',
+    password: process.env.DB_PASSWORD || 'todo_local_todo',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
 });
 
-// ===============================================
-// ROTA 2: POST /tarefas (CRIAR NOVA TAREFA) - NOVO
-// ===============================================
-app.post('/tarefas', (req, res) => {
-    // Pega o 'texto' do corpo da requisição JSON enviado pelo Front-end
-    const { texto } = req.body;
+app.use(cors());
+app.use(express.json());
+
+function formatarTarefa(row) {
+    return {
+        id: Number(row.id),
+        texto: row.texto,
+        concluida: Boolean(row.concluida),
+    };
+}
+
+app.get('/tarefas', async (req, res) => {
+    const [rows] = await pool.execute(
+        'SELECT id, texto, concluida FROM tarefas ORDER BY id'
+    );
+    return res.json(rows.map(formatarTarefa));
+});
+
+app.post('/tarefas', async (req, res) => {
+    const texto = typeof req.body.texto === 'string' ? req.body.texto.trim() : '';
 
     if (!texto) {
         return res.status(400).json({ erro: 'O campo texto é obrigatório.' });
     }
 
-    const novaTarefa = {
-        // Gera um ID único simulando o comportamento do MongoDB
-        id: Date.now(), 
+    const [result] = await pool.execute(
+        'INSERT INTO tarefas (texto, concluida) VALUES (?, FALSE)',
+        [texto]
+    );
+
+    return res.status(201).json({
+        id: Number(result.insertId),
         texto,
-        concluida: false
-    };
-
-    // Adiciona a nova tarefa ao array (em memória)
-    mockTarefas.push(novaTarefa);
-
-    // Retorna a tarefa criada (o Front-end precisa do _id gerado)
-    return res.status(201).json(novaTarefa);
+        concluida: false,
+    });
 });
 
-// ===============================================
-// ROTA 3: DELETE /tarefas/:id (EXCLUIR TAREFA) - NOVO
-// ===============================================
-app.delete('/tarefas/:id', (req, res) => {
-    // Pega o ID da URL (ex: /tarefas/12345)
-    const { id } = req.params;
+app.patch('/tarefas/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    const concluida = req.body.concluida;
 
-    // Filtra a lista, removendo a tarefa com o ID correspondente
-    const tamanhoOriginal = mockTarefas.length;
-    mockTarefas = mockTarefas.filter(t => t.id.toString() !== id.toString());
-    
-    // Verifica se alguma tarefa foi removida
-    if (mockTarefas.length === tamanhoOriginal) {
+    if (!Number.isSafeInteger(id) || id <= 0 || typeof concluida !== 'boolean') {
+        return res.status(400).json({ erro: 'ID ou campo concluida inválido.' });
+    }
+
+    const [result] = await pool.execute(
+        'UPDATE tarefas SET concluida = ? WHERE id = ?',
+        [concluida, id]
+    );
+
+    if (result.affectedRows === 0) {
         return res.status(404).json({ erro: 'Tarefa não encontrada.' });
     }
 
-    // Retorna um status 204 (No Content) indicando sucesso sem corpo de resposta
+    const [rows] = await pool.execute(
+        'SELECT id, texto, concluida FROM tarefas WHERE id = ?',
+        [id]
+    );
+    return res.json(formatarTarefa(rows[0]));
+});
+
+app.delete('/tarefas/:id', async (req, res) => {
+    const id = Number(req.params.id);
+
+    if (!Number.isSafeInteger(id) || id <= 0) {
+        return res.status(400).json({ erro: 'ID inválido.' });
+    }
+
+    const [result] = await pool.execute('DELETE FROM tarefas WHERE id = ?', [id]);
+
+    if (result.affectedRows === 0) {
+        return res.status(404).json({ erro: 'Tarefa não encontrada.' });
+    }
+
     return res.status(204).send();
 });
 
-// Rota simples de teste (opcional)
 app.get('/', (req, res) => {
     res.json({ mensagem: 'API de Tarefas disponível', instancia: INSTANCE_NAME });
 });
 
-// Usada pelo Docker Compose para confirmar que cada réplica está pronta.
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', instancia: INSTANCE_NAME });
+app.get('/health', async (req, res) => {
+    await pool.query('SELECT 1');
+    return res.status(200).json({ status: 'ok', instancia: INSTANCE_NAME });
 });
 
+app.use((error, req, res, next) => {
+    console.error('Erro na API:', error);
+    return res.status(500).json({ erro: 'Erro interno ao acessar as tarefas.' });
+});
 
-// Inicializa o servidor
-app.listen(PORT, () => {
-    console.log(`Instância ${INSTANCE_NAME} rodando na porta ${PORT}`);
-    console.log('Pronto para atender requisições do seu Front-End React.');
+async function aguardarBancoDeDados() {
+    const maxTentativas = 30;
+
+    for (let tentativa = 1; tentativa <= maxTentativas; tentativa += 1) {
+        try {
+            await pool.query('SELECT 1 FROM tarefas LIMIT 1');
+            console.log('Conexão com MySQL estabelecida.');
+            return;
+        } catch (error) {
+            if (tentativa === maxTentativas) {
+                throw error;
+            }
+
+            console.log(`Aguardando MySQL (${tentativa}/${maxTentativas})...`);
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+    }
+}
+
+async function iniciar() {
+    await aguardarBancoDeDados();
+    app.listen(PORT, () => {
+        console.log(`Instância ${INSTANCE_NAME} rodando na porta ${PORT}`);
+    });
+}
+
+iniciar().catch(async (error) => {
+    console.error('Não foi possível iniciar a API:', error);
+    await pool.end();
+    process.exit(1);
 });

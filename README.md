@@ -15,9 +15,18 @@ Load balancer (Nginx, least_conn)
    ├── api-1 (Express)
    ├── api-2 (Express)
    └── api-3 (Express)
+           │
+           ▼
+       MySQL 8.4
 ```
 
-O frontend não conhece portas ou endereços das APIs. Ele chama `/api/tarefas`; o Nginx do frontend encaminha a chamada ao serviço `load-balancer`, que seleciona a réplica menos ocupada. As APIs não expõem portas ao host, ficando acessíveis somente pela rede interna `todo-network`.
+O frontend não conhece portas ou endereços das APIs. Ele chama `/api/tarefas`; o Nginx do frontend encaminha a chamada ao serviço `load-balancer`, que seleciona a réplica menos ocupada. As três APIs compartilham o serviço MySQL, então qualquer réplica lê e altera os mesmos dados. Banco e APIs ficam acessíveis somente pela rede interna `todo-network`.
+
+## Banco de dados
+
+O MySQL armazena as tarefas na tabela `tarefas`. O arquivo `database/init.sql` cria a tabela e insere tarefas iniciais quando o volume do banco é criado pela primeira vez. O volume `mysql-data` mantém os dados mesmo depois de `docker compose down`.
+
+Para desenvolvimento local, o Compose usa as credenciais padrão definidas nele. Você pode sobrescrever a senha do usuário da aplicação definindo `MYSQL_PASSWORD` no ambiente antes de iniciar os serviços. Essas credenciais padrão são apenas para desenvolvimento local.
 
 ## Como executar
 
@@ -43,8 +52,8 @@ Com a aplicação ativa, uma consulta à API pelo frontend deve retornar as tare
 curl http://localhost:8080/api/tarefas
 ```
 
-Cada API possui o endpoint interno `GET /health`, utilizado pelo healthcheck do Compose.
+Cada API possui o endpoint interno `GET /health`, utilizado pelo healthcheck do Compose. O endpoint confirma também que a API consegue acessar o MySQL.
 
 ## Observação sobre dados
 
-Os dados da API de referência são mantidos em memória. Portanto, as três réplicas têm dados independentes e as alterações somem ao recriar os contêineres. Em uma evolução para produção, as réplicas devem compartilhar um banco de dados ou outro armazenamento persistente.
+As três réplicas compartilham os dados no MySQL. `docker compose down` preserva o volume. Para apagar também o banco e seus dados, use `docker compose down -v`.

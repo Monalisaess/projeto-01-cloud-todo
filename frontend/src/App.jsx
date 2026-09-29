@@ -248,14 +248,39 @@ function App() {
   
 */
 
-  const removerTarefa = (id) => {
-    setTarefas(tarefas.filter(tarefa => tarefa.id !== id));
+  const removerTarefa = async (id) => {
+    try {
+      const response = await fetch(`/api/tarefas/${id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error('Falha ao remover tarefa na API.');
+      }
+      setTarefas((tarefasAtuais) => tarefasAtuais.filter((tarefa) => tarefa.id !== id));
+    } catch (error) {
+      console.error('Erro ao remover tarefa:', error);
+    }
   };
 
-  const alternarConclusao = (id) => {
-    setTarefas(tarefas.map(tarefa =>
-      tarefa.id === id ? { ...tarefa, concluida: !tarefa.concluida } : tarefa
-    ));
+  const alternarConclusao = async (id) => {
+    const tarefa = tarefas.find((item) => item.id === id);
+    if (!tarefa) return;
+
+    try {
+      const response = await fetch(`/api/tarefas/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ concluida: !tarefa.concluida }),
+      });
+      if (!response.ok) {
+        throw new Error('Falha ao atualizar tarefa na API.');
+      }
+
+      const tarefaAtualizada = await response.json();
+      setTarefas((tarefasAtuais) => tarefasAtuais.map((item) =>
+        item.id === id ? tarefaAtualizada : item
+      ));
+    } catch (error) {
+      console.error('Erro ao atualizar tarefa:', error);
+    }
   };
 
   return (
